@@ -255,6 +255,115 @@ function Apply-Fix {
     }
 }
 
+function Search-Mods {
+    param([string]$Query)
+    
+    Write-Info "Searching mod registry..."
+    try {
+        $registryUrl = "https://raw.githubusercontent.com/$MODLOADER_REPO/main/mods.json"
+        $registry = Invoke-RestMethod -Uri $registryUrl -UseBasicParsing
+        $mods = $registry.mods
+        
+        if ($Query) {
+            $q = $Query.ToLower()
+            $mods = $mods | Where-Object {
+                $_.name.ToLower().Contains($q) -or
+                $_.id.ToLower().Contains($q) -or
+                $_.description.ToLower().Contains($q) -or
+                ($_.tags -join ',').ToLower().Contains($q)
+            }
+        }
+        
+        if ($mods.Count -eq 0) {
+            Write-Info "No mods found$(if ($Query) { " matching '$Query'" })."
+            return
+        }
+        
+        $installed = (Get-InstalledMods).Id
+        
+        Write-Cyan "`n  Available Mods ($($mods.Count)):"
+        Write-Host "  $('-' * 65)"
+        foreach ($mod in $mods) {
+            $status = if ($installed -contains $mod.id) { "[INSTALLED]" } else { "           " }
+            $statusColor = if ($installed -contains $mod.id) { "Green" } else { "DarkGray" }
+            Write-Host "  " -NoNewline
+            Write-Host $status -ForegroundColor $statusColor -NoNewline
+            Write-Host " $($mod.name)" -ForegroundColor White -NoNewline
+            Write-Host " v$($mod.version)" -ForegroundColor DarkCyan -NoNewline
+            Write-Host " by $($mod.author)" -ForegroundColor DarkGray
+            Write-Host "              $($mod.description)" -ForegroundColor Gray
+            if ($mod.tags) {
+                $tagStr = ($mod.tags | ForEach-Object { "#$_" }) -join ' '
+                Write-Host "              $tagStr" -ForegroundColor DarkMagenta
+            }
+            Write-Host ""
+        }
+    } catch {
+        Write-Fail "Could not fetch mod registry: $_"
+    }
+}
+
+function Show-ModInfo {
+    param([string]$ModId)
+    
+    if (!$ModId) {
+        Write-Fail "Usage: luatools mod info <mod-id>"
+        return
+    }
+    
+    # Check local first
+    $modPath = Join-Path $MODS_DIR $ModId
+    $manifest = Join-Path $modPath "manifest.json"
+    if (Test-Path $manifest) {
+        $data = Get-Content $manifest -Raw | ConvertFrom-Json
+        Write-Cyan "`n  $($data.name) (installed)"
+        Write-Host "  $('-' * 40)"
+        Write-Host "  ID:           $($data.id)"
+        Write-Host "  Version:      $($data.version)"
+        Write-Host "  Author:       $($data.author)"
+        Write-Host "  Description:  $($data.description)"
+        if ($data.repository) { Write-Host "  Repository:   $($data.repository)" }
+        if ($data.hooks) { Write-Host "  Hooks:        $($data.hooks -join ', ')" }
+        if ($data.dependencies) { Write-Host "  Dependencies: $($data.dependencies -join ', ')" }
+        Write-Host ""
+    } else {
+        Write-Fail "Mod '$ModId' not installed. Use 'luatools mod search' to find available mods."
+    }
+}
+
+function Update-Mods {
+    Write-Info "Checking for mod updates..."
+    $mods = Get-InstalledMods
+    $updatesFound = $false
+    
+    foreach ($mod in $mods) {
+        $manifest = Join-Path $mod.Path "manifest.json"
+        if (!(Test-Path $manifest)) { continue }
+        $data = Get-Content $manifest -Raw | ConvertFrom-Json
+        if (!$data.repository) { continue }
+        
+        $repoPath = $data.repository -replace "https?://github\.com/", "" -replace "/$", ""
+        try {
+            $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repoPath/releases/latest" -UseBasicParsing -Headers @{'User-Agent'='LuaTools-CLI'}
+            $remoteVer = $release.tag_name -replace '^v', ''
+            $localVer = $data.version
+            if ($remoteVer -ne $localVer) {
+                $updatesFound = $true
+                Write-Host "  " -NoNewline
+                Write-Host "[UPDATE] " -ForegroundColor Yellow -NoNewline
+                Write-Host "$($data.name): v$localVer -> v$remoteVer" -ForegroundColor White
+            }
+        } catch { }
+    }
+    
+    if (!$updatesFound) {
+        Write-Success "All mods are up to date!"
+    } else {
+        Write-Host ""
+        Write-Info "Use 'luatools mod install <repo-url>' to update a specific mod."
+    }
+}
+
 function Show-Doctor {
     Write-Cyan "`n  LuaTools Doctor"
     Write-Host "  $('-' * 40)"
@@ -372,6 +481,9 @@ function Show-Help {
     Write-Host "    mod install <url|path>     Install a mod from GitHub or local path"
     Write-Host "    mod remove <mod-id>        Uninstall a mod"
     Write-Host "    mod list                   List all installed mods"
+    Write-Host "    mod search [query]         Search the community mod registry"
+    Write-Host "    mod info <mod-id>          Show detailed info about a mod"
+    Write-Host "    mod update                 Check all mods for updates"
     Write-Host "    mod enable <mod-id>        Enable a mod"
     Write-Host "    mod disable <mod-id>       Disable a mod"
     Write-Host ""
@@ -396,9 +508,12 @@ switch ($Command) {
             "install" { Install-Mod -Source $Arg2 }
             "remove"  { Remove-Mod -ModId $Arg2 }
             "list"    { Show-ModList }
+            "search"  { Search-Mods -Query $Arg2 }
+            "info"    { Show-ModInfo -ModId $Arg2 }
+            "update"  { Update-Mods }
             "enable"  { Toggle-Mod -ModId $Arg2 -Enabled $true }
             "disable" { Toggle-Mod -ModId $Arg2 -Enabled $false }
-            default   { Write-Fail "Unknown mod command. Use: install, remove, list, enable, disable" }
+            default   { Write-Fail "Unknown mod command. Use: install, remove, list, search, info, update, enable, disable" }
         }
     }
     "fix" {

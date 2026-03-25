@@ -9,13 +9,35 @@ User clicks "Request Auto-Fix" in Steam
   ↓
 Frontend sends POST to cloud API
   ↓
-Cloud API searches online-fix.me
-  ↓
-Crawls the open FTP directory for Fix Repair archives
-  ↓
-Returns a proxy download URL
-  ↓
+API checks GitHub cache (fixes_index.json)
+  ├── CACHE HIT → return cached URL instantly
+  └── CACHE MISS ↓
+      Cloud API searches online-fix.me
+        ↓
+      Crawls the open FTP directory for Fix Repair archives
+        ↓
+      Saves fix to GitHub cache for future users
+        ↓
+      Returns a proxy download URL
+        ↓
 Local LuaTools downloads via proxy → extracts with 7-Zip → replaces game files
+```
+
+## Fix Caching
+
+The API caches fix URLs in a `fixes_index.json` file hosted on the `nitaybl/luatools-fixes` GitHub repo. After a successful scrape, the fix URL is saved to the cache. Subsequent requests for the same AppID skip the scrape entirely and return the cached URL.
+
+**Cache entry structure:**
+```json
+{
+    "246620": {
+        "gameName": "Plague Inc: Evolved",
+        "downloadUrl": "https://uploads.online-fix.me/...",
+        "articleUrl": "https://online-fix.me/games/...",
+        "cachedAt": "2026-03-25T19:00:00",
+        "appid": 246620
+    }
+}
 ```
 
 ## Endpoints

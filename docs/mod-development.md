@@ -32,6 +32,7 @@ mods/
     "main": "mod.js",
     "style": "style.css",
     "hooks": ["onOverlayOpen", "onFixApplied"],
+    "dependencies": ["core-ui"],
     "repository": "https://github.com/you/my-awesome-mod",
     "minLuaToolsVersion": "7.1"
 }
@@ -47,6 +48,7 @@ mods/
 | `main` | ✅ | Entry JavaScript file (relative to mod folder) |
 | `style` | ❌ | Optional CSS file to inject |
 | `hooks` | ❌ | Array of lifecycle hook names your mod uses |
+| `dependencies` | ❌ | Array of mod IDs this mod depends on (loaded first) |
 | `repository` | ❌ | GitHub URL — enables auto-updates via releases |
 | `minLuaToolsVersion` | ❌ | Minimum LuaTools version required |
 
@@ -107,3 +109,23 @@ If your `manifest.json` includes a `repository` field:
 - Use `LuaToolsMods.injectCSS()` for dynamic style changes
 - Check `LuaToolsMods.hasMod('other-mod-id')` for inter-mod compatibility
 - Access all registered mods via `LuaToolsMods.getMods()`
+- Use `LuaToolsMods.getStorage('my-mod')` to persist settings between sessions
+
+## Persistent Storage
+
+Use the sandboxed storage API to save mod settings between sessions:
+
+```js
+var store = LuaToolsMods.getStorage('my-mod');
+
+// Save a user preference
+store.set('theme', 'neon');
+store.set('showOnStartup', false);
+
+// Read it back later
+var theme = store.get('theme', 'default'); // 'neon'
+
+// Each mod's storage is isolated — keys never collide
+```
+
+See the [API Reference](api-reference.md#sandboxed-storage) for full method documentation.

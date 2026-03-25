@@ -1,0 +1,56 @@
+{
+    "registry_version": "1.0.0",
+    "last_updated": "2026-03-25",
+    "mods": [
+        {
+            "id": "credits-mod",
+            "name": "LuaTools Credits",
+            "description": "Adds contributor credits panel to the overlay.",
+            "author": "nitaybl",
+            "version": "1.0.0",
+            "repository": "https://github.com/nitaybl/luatools-modloader",
+            "tags": ["ui", "credits"],
+            "downloads": 0
+        },
+        {
+            "id": "cyberpunk-theme",
+            "name": "Cyberpunk Theme",
+            "description": "Neon visual overhaul with animated glow borders and Orbitron font.",
+            "author": "nitaybl",
+            "version": "1.0.0",
+            "repository": "https://github.com/nitaybl/luatools-modloader",
+            "tags": ["theme", "ui", "visual"],
+            "downloads": 0
+        },
+        {
+            "id": "quick-actions",
+            "name": "Quick Actions Bar",
+            "description": "Copy AppID, open install folder, SteamDB, and PCGamingWiki buttons.",
+            "author": "nitaybl",
+            "version": "1.0.0",
+            "repository": "https://github.com/nitaybl/luatools-modloader",
+            "tags": ["utility", "buttons", "tools"],
+            "downloads": 0
+        },
+        {
+            "id": "fix-notifications",
+            "name": "Fix Notifications",
+            "description": "Animated toast alerts with sound feedback for fix events.",
+            "author": "nitaybl",
+            "version": "1.0.0",
+            "repository": "https://github.com/nitaybl/luatools-modloader",
+            "tags": ["notifications", "audio", "alerts"],
+            "downloads": 0
+        },
+        {
+            "id": "game-stats",
+            "name": "Game Stats Tracker",
+            "description": "Real-time game info panel with install status, achievements, and playtime.",
+            "author": "nitaybl",
+            "version": "1.0.0",
+            "repository": "https://github.com/nitaybl/luatools-modloader",
+            "tags": ["stats", "info", "steam-api"],
+            "downloads": 0
+        }
+    ]
+}

@@ -120,20 +120,96 @@
                 onClick: options.onClick || function() {},
                 _modId: options.modId || 'unknown'
             };
+        },
+
+        // Utility: sandboxed key-value storage per mod (backed by localStorage)
+        getStorage: function(modId) {
+            var prefix = 'ltmod_' + modId + '_';
+            return {
+                get: function(key, defaultValue) {
+                    try {
+                        var raw = localStorage.getItem(prefix + key);
+                        if (raw === null) return defaultValue !== undefined ? defaultValue : null;
+                        return JSON.parse(raw);
+                    } catch(e) {
+                        return defaultValue !== undefined ? defaultValue : null;
+                    }
+                },
+                set: function(key, value) {
+                    try {
+                        localStorage.setItem(prefix + key, JSON.stringify(value));
+                    } catch(e) {
+                        console.error('[ModLoader] Storage error for ' + modId + ':', e);
+                    }
+                },
+                remove: function(key) {
+                    localStorage.removeItem(prefix + key);
+                },
+                clear: function() {
+                    var toRemove = [];
+                    for (var i = 0; i < localStorage.length; i++) {
+                        var k = localStorage.key(i);
+                        if (k && k.indexOf(prefix) === 0) toRemove.push(k);
+                    }
+                    toRemove.forEach(function(k) { localStorage.removeItem(k); });
+                },
+                keys: function() {
+                    var result = [];
+                    for (var i = 0; i < localStorage.length; i++) {
+                        var k = localStorage.key(i);
+                        if (k && k.indexOf(prefix) === 0) result.push(k.substring(prefix.length));
+                    }
+                    return result;
+                }
+            };
         }
     };
 
-    // Load mods from backend
+    // Load mods from backend with dependency resolution
     async function loadMods() {
         try {
             var modList = await Millennium.callServerMethod('luatools', 'GetModList', {});
             var mods = JSON.parse(modList);
             console.log('[ModLoader] Found ' + mods.length + ' mod(s) to load');
 
+            // Build a map of available mod IDs for dependency checking
+            var modMap = {};
             for (var i = 0; i < mods.length; i++) {
-                var mod = mods[i];
+                modMap[mods[i].id] = mods[i];
+            }
+
+            // Topological sort: mods with dependencies load after their deps
+            var sorted = [];
+            var visited = {};
+            function visit(mod) {
+                if (visited[mod.id]) return;
+                visited[mod.id] = true;
+                var deps = mod.dependencies || [];
+                for (var d = 0; d < deps.length; d++) {
+                    if (modMap[deps[d]]) visit(modMap[deps[d]]);
+                }
+                sorted.push(mod);
+            }
+            for (var j = 0; j < mods.length; j++) visit(mods[j]);
+
+            for (var i = 0; i < sorted.length; i++) {
+                var mod = sorted[i];
                 if (!mod.enabled) {
                     console.log('[ModLoader] Skipping disabled mod: ' + mod.id);
+                    continue;
+                }
+
+                // Check dependencies
+                var deps = mod.dependencies || [];
+                var missing = [];
+                for (var d = 0; d < deps.length; d++) {
+                    if (!modMap[deps[d]] || !modMap[deps[d]].enabled) {
+                        missing.push(deps[d]);
+                    }
+                }
+                if (missing.length > 0) {
+                    console.warn('[ModLoader] Mod ' + mod.id + ' missing dependencies: ' + missing.join(', '));
+                    LuaToolsMods.showToast('⚠️ ' + mod.id + ' needs: ' + missing.join(', '), 5000);
                     continue;
                 }
 

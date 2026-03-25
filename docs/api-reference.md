@@ -188,3 +188,55 @@ LuaToolsMods.fireHook('onCustomEvent', { message: 'hello from my mod' });
 | `LuaToolsMods.version` | `string` | Mod loader version |
 | `LuaToolsMods._mods` | `object` | Internal mod registry (read-only) |
 | `LuaToolsMods._hooks` | `object` | Internal hook registry (read-only) |
+
+---
+
+## Sandboxed Storage
+
+### `LuaToolsMods.getStorage(modId)`
+
+Returns a scoped key-value store backed by `localStorage`. Each mod gets its own namespace — keys from one mod never collide with another.
+
+```js
+var store = LuaToolsMods.getStorage('my-mod');
+
+// Save settings
+store.set('theme', 'dark');
+store.set('notificationsEnabled', true);
+store.set('history', [246620, 3527290]);
+
+// Read settings
+var theme = store.get('theme', 'light');  // 'dark'
+var missing = store.get('foo', 'default'); // 'default'
+
+// List all keys
+var allKeys = store.keys(); // ['theme', 'notificationsEnabled', 'history']
+
+// Delete
+store.remove('theme');
+store.clear(); // removes all keys for this mod only
+```
+
+| Method | Params | Returns | Description |
+|--------|--------|---------|-------------|
+| `get(key, default?)` | `string`, `any` | `any` | Read a value. Returns `default` if key doesn't exist. |
+| `set(key, value)` | `string`, `any` | — | Store a value. Values are JSON-serialized. |
+| `remove(key)` | `string` | — | Delete a single key. |
+| `clear()` | — | — | Delete all keys for this mod. |
+| `keys()` | — | `string[]` | List all stored keys for this mod. |
+
+---
+
+## Dependency Management
+
+Mods can declare dependencies on other mods via the `dependencies` field in `manifest.json`:
+
+```json
+{
+    "id": "my-advanced-mod",
+    "dependencies": ["core-ui", "theme-engine"]
+}
+```
+
+The mod loader performs **topological sorting** to ensure dependencies load first. If a dependency is missing or disabled, the mod is skipped and a toast warning is shown to the user.
+
