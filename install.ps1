@@ -19,7 +19,7 @@ if (!(Test-Path $installDir)) {
 }
 
 # Download the CLI script
-$url = "https://raw.githubusercontent.com/nitaybl/kite/main/luatools.ps1"
+$url = "https://raw.githubusercontent.com/nitaybl/kite/main/kiteloader.ps1"
 Write-Host "  Downloading CLI from GitHub..." -ForegroundColor Yellow
 Invoke-WebRequest -Uri $url -OutFile $scriptPath -UseBasicParsing
 Write-Host "  [+] CLI downloaded to: $scriptPath" -ForegroundColor Green
@@ -41,5 +41,5 @@ if ($currentPath -notlike "*$installDir*") {
 Write-Host ""
 Write-Host "  Installation complete!" -ForegroundColor Green
 Write-Host "  Usage: luatools help" -ForegroundColor Cyan
-Write-Host "  First run: luatools install  (installs the mod loader onto LuaTools)" -ForegroundColor DarkGray
+Write-Host "  First run: kiteloader install  (installs the mod loader onto Steam)" -ForegroundColor DarkGray
 Write-Host ""

@@ -28,7 +28,7 @@
 ### Option 1: One-Line Install (Recommended)
 ```powershell
 irm https://raw.githubusercontent.com/nitaybl/kite/main/install.ps1 | iex
-luatools install
+kiteloader install
 ```
 
 ### Option 2: Manual Installation
