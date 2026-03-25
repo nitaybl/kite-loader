@@ -41,5 +41,5 @@ if ($currentPath -notlike "*$installDir*") {
 Write-Host ""
 Write-Host "  Installation complete!" -ForegroundColor Green
 Write-Host "  Usage: luatools help" -ForegroundColor Cyan
-Write-Host "  First run: kiteloader install  (installs the mod loader onto Steam)" -ForegroundColor DarkGray
+Write-Host "  First run: kiteloader install  (installs the mod loader onto LuaTools)" -ForegroundColor DarkGray
 Write-Host ""
