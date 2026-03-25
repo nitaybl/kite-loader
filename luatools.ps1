@@ -1,0 +1,414 @@
+<#
+.SYNOPSIS
+    LuaTools Mod Loader - PowerShell CLI
+.DESCRIPTION
+    Install, manage, and update LuaTools mods from the command line.
+    Usage: luatools <command> [arguments]
+#>
+
+param(
+    [Parameter(Position=0)]
+    [string]$Command,
+    [Parameter(Position=1)]
+    [string]$Arg1,
+    [Parameter(Position=2)]
+    [string]$Arg2
+)
+
+$ErrorActionPreference = "Stop"
+
+# ============================================
+# CONFIGURATION
+# ============================================
+$LUATOOLS_DIR = "C:\Program Files (x86)\Steam\plugins\luatools"
+$MODS_DIR = Join-Path $LUATOOLS_DIR "mods"
+$CONFIG_FILE = Join-Path $MODS_DIR "mods_config.json"
+$MODLOADER_REPO = "nitaybl/luatools-modloader"
+$FIXES_REPO = "nitaybl/luatools-fixes"
+$VERSION = "1.0.0"
+
+# ============================================
+# HELPERS
+# ============================================
+function Write-Cyan($text) { Write-Host $text -ForegroundColor Cyan }
+function Write-Purple($text) { Write-Host $text -ForegroundColor Magenta }
+function Write-Success($text) { Write-Host "[+] $text" -ForegroundColor Green }
+function Write-Fail($text) { Write-Host "[-] $text" -ForegroundColor Red }
+function Write-Info($text) { Write-Host "[*] $text" -ForegroundColor Yellow }
+
+function Show-Banner {
+    Write-Cyan @"
+
+  _                _____           _     
+ | |   _   _  __ |_   _|__   ___ | |___ 
+ | |  | | | |/ _`  | |/ _ \ / _ \| / __|
+ | |__| |_| | (_|  | | (_) | (_) | \__ \
+ |_____\__,_|\__,| |_|\___/ \___/|_|___/
+                                          
+"@
+    Write-Purple "  MOD LOADER CLI v$VERSION"
+    Write-Host ""
+}
+
+function Ensure-ModsDir {
+    if (!(Test-Path $MODS_DIR)) {
+        New-Item -ItemType Directory -Path $MODS_DIR -Force | Out-Null
+    }
+}
+
+function Get-ModConfig {
+    if (Test-Path $CONFIG_FILE) {
+        return Get-Content $CONFIG_FILE -Raw | ConvertFrom-Json
+    }
+    return @{}
+}
+
+function Save-ModConfig($config) {
+    Ensure-ModsDir
+    $config | ConvertTo-Json -Depth 5 | Set-Content $CONFIG_FILE -Encoding UTF8
+}
+
+function Get-InstalledMods {
+    Ensure-ModsDir
+    $mods = @()
+    
+    # Folder mods
+    Get-ChildItem $MODS_DIR -Directory | ForEach-Object {
+        $manifest = Join-Path $_.FullName "manifest.json"
+        if (Test-Path $manifest) {
+            $data = Get-Content $manifest -Raw | ConvertFrom-Json
+            $mods += [PSCustomObject]@{
+                Id = $data.id
+                Name = $data.name
+                Version = $data.version
+                Author = $data.author
+                Type = "folder"
+                Path = $_.FullName
+            }
+        }
+    }
+    
+    # Single-file mods
+    Get-ChildItem $MODS_DIR -Filter "*.js" | ForEach-Object {
+        $mods += [PSCustomObject]@{
+            Id = $_.BaseName
+            Name = $_.BaseName
+            Version = "?"
+            Author = "?"
+            Type = "single-file"
+            Path = $_.FullName
+        }
+    }
+    
+    return $mods
+}
+
+# ============================================
+# COMMANDS
+# ============================================
+function Install-Mod {
+    param([string]$Source)
+    
+    if (!$Source) {
+        Write-Fail "Usage: luatools mod install <github-url|local-path>"
+        return
+    }
+
+    Ensure-ModsDir
+
+    if ($Source -match "^https?://github\.com/") {
+        # GitHub repo install
+        $repoPath = $Source -replace "https?://github\.com/", "" -replace "\.git$", "" -replace "/$", ""
+        $zipUrl = "https://github.com/$repoPath/archive/refs/heads/main.zip"
+        $tempZip = Join-Path $env:TEMP "ltmod_download.zip"
+        $tempDir = Join-Path $env:TEMP "ltmod_extract"
+
+        Write-Info "Downloading from $zipUrl..."
+        Invoke-WebRequest -Uri $zipUrl -OutFile $tempZip -UseBasicParsing
+
+        if (Test-Path $tempDir) { Remove-Item $tempDir -Recurse -Force }
+        Expand-Archive -Path $tempZip -DestinationPath $tempDir -Force
+
+        # Find the manifest inside
+        $extracted = Get-ChildItem $tempDir -Directory | Select-Object -First 1
+        $manifest = Get-ChildItem $extracted.FullName -Filter "manifest.json" -Recurse | Select-Object -First 1
+        
+        if ($manifest) {
+            $data = Get-Content $manifest.FullName -Raw | ConvertFrom-Json
+            $destDir = Join-Path $MODS_DIR $data.id
+            
+            if (Test-Path $destDir) {
+                Write-Info "Updating existing mod: $($data.name)"
+                Remove-Item $destDir -Recurse -Force
+            }
+            
+            Copy-Item $manifest.Directory.FullName $destDir -Recurse
+            Write-Success "Installed '$($data.name)' v$($data.version) by $($data.author)"
+        } else {
+            Write-Fail "No manifest.json found in repository"
+        }
+
+        Remove-Item $tempZip -Force -ErrorAction SilentlyContinue
+        Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+
+    } elseif (Test-Path $Source) {
+        # Local install
+        if ((Get-Item $Source).PSIsContainer) {
+            $manifest = Join-Path $Source "manifest.json"
+            if (Test-Path $manifest) {
+                $data = Get-Content $manifest -Raw | ConvertFrom-Json
+                $dest = Join-Path $MODS_DIR $data.id
+                Copy-Item $Source $dest -Recurse -Force
+                Write-Success "Installed '$($data.name)' from local path"
+            } else {
+                Write-Fail "No manifest.json found in $Source"
+            }
+        } elseif ($Source.EndsWith(".js")) {
+            Copy-Item $Source $MODS_DIR -Force
+            Write-Success "Installed single-file mod: $(Split-Path $Source -Leaf)"
+        }
+    } else {
+        Write-Fail "Source not found: $Source"
+    }
+}
+
+function Remove-Mod {
+    param([string]$ModId)
+    
+    if (!$ModId) {
+        Write-Fail "Usage: luatools mod remove <mod-id>"
+        return
+    }
+
+    $modPath = Join-Path $MODS_DIR $ModId
+    $singleFile = Join-Path $MODS_DIR "$ModId.js"
+
+    if (Test-Path $modPath) {
+        Remove-Item $modPath -Recurse -Force
+        Write-Success "Removed mod: $ModId"
+    } elseif (Test-Path $singleFile) {
+        Remove-Item $singleFile -Force
+        Write-Success "Removed single-file mod: $ModId"
+    } else {
+        Write-Fail "Mod '$ModId' not found"
+    }
+}
+
+function Show-ModList {
+    $mods = Get-InstalledMods
+    if ($mods.Count -eq 0) {
+        Write-Info "No mods installed. Use 'luatools mod install <source>' to add one."
+        return
+    }
+    
+    $config = Get-ModConfig
+    
+    Write-Cyan "`n  Installed Mods ($($mods.Count)):"
+    Write-Host "  $('-' * 60)"
+    foreach ($mod in $mods) {
+        $enabled = if ($config.PSObject.Properties[$mod.Id]) { $config.($mod.Id) } else { $true }
+        $status = if ($enabled) { "[ON]" } else { "[OFF]" }
+        $statusColor = if ($enabled) { "Green" } else { "Red" }
+        Write-Host "  " -NoNewline
+        Write-Host $status -ForegroundColor $statusColor -NoNewline
+        Write-Host " $($mod.Name) v$($mod.Version) " -NoNewline -ForegroundColor White
+        Write-Host "by $($mod.Author) " -NoNewline -ForegroundColor DarkGray
+        Write-Host "($($mod.Type))" -ForegroundColor DarkGray
+    }
+    Write-Host ""
+}
+
+function Toggle-Mod {
+    param([string]$ModId, [bool]$Enabled)
+    
+    $config = Get-ModConfig
+    # Convert to hashtable if it's a PSCustomObject
+    $hash = @{}
+    if ($config -is [PSCustomObject]) {
+        $config.PSObject.Properties | ForEach-Object { $hash[$_.Name] = $_.Value }
+    } else {
+        $hash = $config
+    }
+    $hash[$ModId] = $Enabled
+    Save-ModConfig $hash
+    
+    $state = if ($Enabled) { "enabled" } else { "disabled" }
+    Write-Success "Mod '$ModId' $state. Restart Steam to apply."
+}
+
+function Apply-Fix {
+    param([string]$AppId)
+    Write-Info "Requesting fix for AppID: $AppId..."
+    try {
+        $body = @{ appid = [int]$AppId; gameName = "CLI-Request" } | ConvertTo-Json
+        $result = Invoke-RestMethod -Uri "https://8000-firebase-nitayv-1774433595291.cluster-iusnsmywp5clov45nv5gsxt5he.cloudworkstations.dev/api/request-fix" `
+            -Method POST -Body $body -ContentType "application/json"
+        
+        if ($result.success) {
+            Write-Success "Fix found! URL: $($result.downloadUrl)"
+            Write-Success "Article: $($result.articleUrl)"
+        } else {
+            Write-Fail $result.message
+        }
+    } catch {
+        Write-Fail "API request failed: $_"
+    }
+}
+
+function Show-Doctor {
+    Write-Cyan "`n  LuaTools Doctor"
+    Write-Host "  $('-' * 40)"
+    
+    # Check LuaTools installation
+    $ltExists = Test-Path $LUATOOLS_DIR
+    Write-Host "  LuaTools installed: " -NoNewline
+    Write-Host $(if ($ltExists) { "YES" } else { "NO" }) -ForegroundColor $(if ($ltExists) { "Green" } else { "Red" })
+    
+    # Check mods directory
+    $modsExists = Test-Path $MODS_DIR
+    Write-Host "  Mods directory: " -NoNewline
+    Write-Host $(if ($modsExists) { "YES" } else { "NO" }) -ForegroundColor $(if ($modsExists) { "Green" } else { "Red" })
+    
+    # Check mod loader files
+    $loaderJs = Test-Path (Join-Path $LUATOOLS_DIR "public\mod_loader.js")
+    Write-Host "  Mod Loader (JS): " -NoNewline
+    Write-Host $(if ($loaderJs) { "YES" } else { "NO" }) -ForegroundColor $(if ($loaderJs) { "Green" } else { "Red" })
+    
+    $loaderPy = Test-Path (Join-Path $LUATOOLS_DIR "backend\mod_loader.py")
+    Write-Host "  Mod Loader (Backend): " -NoNewline
+    Write-Host $(if ($loaderPy) { "YES" } else { "NO" }) -ForegroundColor $(if ($loaderPy) { "Green" } else { "Red" })
+    
+    # Count mods
+    if ($modsExists) {
+        $modCount = (Get-InstalledMods).Count
+        Write-Host "  Installed mods: $modCount"
+    }
+    
+    # Check 7-Zip
+    $sevenZ = Test-Path "C:\Program Files\7-Zip\7z.exe"
+    Write-Host "  7-Zip: " -NoNewline
+    Write-Host $(if ($sevenZ) { "YES" } else { "NO" }) -ForegroundColor $(if ($sevenZ) { "Green" } else { "Red" })
+    
+    Write-Host ""
+}
+
+function Install-ModLoader {
+    Write-Info "Installing LuaTools Mod Loader..."
+    
+    if (!(Test-Path $LUATOOLS_DIR)) {
+        Write-Fail "LuaTools not found at $LUATOOLS_DIR. Install LuaTools first!"
+        return
+    }
+
+    $tempZip = Join-Path $env:TEMP "modloader.zip"
+    $tempDir = Join-Path $env:TEMP "modloader_extract"
+    
+    Write-Info "Downloading latest mod loader from GitHub..."
+    $zipUrl = "https://github.com/$MODLOADER_REPO/archive/refs/heads/main.zip"
+    Invoke-WebRequest -Uri $zipUrl -OutFile $tempZip -UseBasicParsing
+    
+    if (Test-Path $tempDir) { Remove-Item $tempDir -Recurse -Force }
+    Expand-Archive -Path $tempZip -DestinationPath $tempDir -Force
+    
+    $source = Get-ChildItem $tempDir -Directory | Select-Object -First 1
+    
+    # Copy mod_loader.js to public/
+    $jsSource = Join-Path $source.FullName "mod_loader.js"
+    if (Test-Path $jsSource) {
+        Copy-Item $jsSource (Join-Path $LUATOOLS_DIR "public\mod_loader.js") -Force
+        Write-Success "Installed mod_loader.js"
+    }
+    
+    # Copy mod_loader.py to backend/
+    $pySource = Join-Path $source.FullName "mod_loader.py"
+    if (Test-Path $pySource) {
+        Copy-Item $pySource (Join-Path $LUATOOLS_DIR "backend\mod_loader.py") -Force
+        Write-Success "Installed mod_loader.py"
+    }
+    
+    # Create mods/ dir with example mods
+    Ensure-ModsDir
+    $modsSource = Join-Path $source.FullName "mods"
+    if (Test-Path $modsSource) {
+        Copy-Item "$modsSource\*" $MODS_DIR -Recurse -Force
+        Write-Success "Installed example mods"
+    }
+    
+    # Cleanup
+    Remove-Item $tempZip -Force -ErrorAction SilentlyContinue
+    Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+    
+    Write-Success "Mod Loader installed! Restart Steam to activate."
+    Write-Info "Mods directory: $MODS_DIR"
+}
+
+function Uninstall-ModLoader {
+    Write-Info "Removing LuaTools Mod Loader..."
+    
+    $jsFile = Join-Path $LUATOOLS_DIR "public\mod_loader.js"
+    $pyFile = Join-Path $LUATOOLS_DIR "backend\mod_loader.py"
+    
+    if (Test-Path $jsFile) { Remove-Item $jsFile -Force; Write-Success "Removed mod_loader.js" }
+    if (Test-Path $pyFile) { Remove-Item $pyFile -Force; Write-Success "Removed mod_loader.py" }
+    
+    $removeMods = Read-Host "Remove all installed mods too? (y/N)"
+    if ($removeMods -eq 'y') {
+        if (Test-Path $MODS_DIR) { Remove-Item $MODS_DIR -Recurse -Force; Write-Success "Removed mods/ directory" }
+    }
+    
+    Write-Success "Mod Loader uninstalled. Core LuaTools is untouched."
+}
+
+function Show-Help {
+    Show-Banner
+    Write-Host "  USAGE:" -ForegroundColor White
+    Write-Host "    luatools <command> [arguments]" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Cyan "  MODLOADER:"
+    Write-Host "    install                    Install the mod loader onto LuaTools"
+    Write-Host "    uninstall                  Remove the mod loader (keeps LuaTools)"
+    Write-Host ""
+    Write-Cyan "  MODS:"
+    Write-Host "    mod install <url|path>     Install a mod from GitHub or local path"
+    Write-Host "    mod remove <mod-id>        Uninstall a mod"
+    Write-Host "    mod list                   List all installed mods"
+    Write-Host "    mod enable <mod-id>        Enable a mod"
+    Write-Host "    mod disable <mod-id>       Disable a mod"
+    Write-Host ""
+    Write-Cyan "  FIXES:"
+    Write-Host "    fix apply <appid>          Request auto-fix for a game"
+    Write-Host ""
+    Write-Cyan "  UTILITY:"
+    Write-Host "    doctor                     Diagnose common issues"
+    Write-Host "    version                    Show version info"
+    Write-Host "    help                       Show this help message"
+    Write-Host ""
+}
+
+# ============================================
+# MAIN ROUTER
+# ============================================
+switch ($Command) {
+    "install"   { Install-ModLoader }
+    "uninstall" { Uninstall-ModLoader }
+    "mod" {
+        switch ($Arg1) {
+            "install" { Install-Mod -Source $Arg2 }
+            "remove"  { Remove-Mod -ModId $Arg2 }
+            "list"    { Show-ModList }
+            "enable"  { Toggle-Mod -ModId $Arg2 -Enabled $true }
+            "disable" { Toggle-Mod -ModId $Arg2 -Enabled $false }
+            default   { Write-Fail "Unknown mod command. Use: install, remove, list, enable, disable" }
+        }
+    }
+    "fix" {
+        switch ($Arg1) {
+            "apply"  { Apply-Fix -AppId $Arg2 }
+            default  { Write-Fail "Unknown fix command. Use: apply" }
+        }
+    }
+    "doctor"  { Show-Doctor }
+    "version" { Show-Banner; Write-Host "  v$VERSION" }
+    "help"    { Show-Help }
+    default   { Show-Help }
+}

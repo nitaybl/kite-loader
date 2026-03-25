@@ -1,0 +1,11 @@
+{
+    "id": "credits-mod",
+    "name": "LuaTools Credits",
+    "version": "1.0.0",
+    "author": "nitaybl",
+    "description": "Adds contributor credits to the LuaTools overlay. Only possible thanks to ShayneVi & nitaybl 💜",
+    "main": "mod.js",
+    "style": "style.css",
+    "hooks": ["onOverlayOpen"],
+    "minLuaToolsVersion": "7.1"
+}
