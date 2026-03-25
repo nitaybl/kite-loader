@@ -4,8 +4,9 @@
 
 <p align="center">
   <a href="https://github.com/nitaybl/luatools-modloader/stargazers"><img src="https://img.shields.io/github/stars/nitaybl/luatools-modloader?style=for-the-badge&color=00ffff&labelColor=0d1117" alt="Stars"></a>
-  <a href="https://github.com/nitaybl/luatools-modloader/releases"><img src="https://img.shields.io/github/v/release/nitaybl/luatools-modloader?style=for-the-badge&color=8b5cf6&labelColor=0d1117" alt="Release"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/nitaybl/luatools-modloader?style=for-the-badge&color=4ade80&labelColor=0d1117" alt="License"></a>
+  <a href="https://nitaybl.gitbook.io/luatools-modloader"><img src="https://img.shields.io/badge/Documentation-8b5cf6?style=for-the-badge&logo=gitbook&logoColor=white&labelColor=0d1117" alt="Docs"></a>
+  <a href="#"><img src="https://img.shields.io/badge/Version-v1.0.0-4ade80?style=for-the-badge&labelColor=0d1117" alt="Version"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-ff6b6b?style=for-the-badge&labelColor=0d1117" alt="License"></a>
 </p>
 
 ---
@@ -24,16 +25,23 @@
 
 ## ⚡ Quick Start
 
+### Option 1: One-Line Install (Recommended)
 ```powershell
 irm https://raw.githubusercontent.com/nitaybl/luatools-modloader/main/install.ps1 | iex
 luatools install
 ```
 
-Restart Steam. Done.
+### Option 2: Manual Installation
+1. **Download** the repository as a ZIP.
+2. **Copy Core Files**:
+   - Move `mod_loader.js` to `Steam/plugins/luatools/public/`
+   - Move `mod_loader.py` and `mod_auto_update.py` to `Steam/plugins/luatools/backend/`
+3. **Create Mods Folder**: Create a folder named `mods` inside `Steam/plugins/luatools/`.
+4. **Restart Steam**: LuaTools will now detect the mod loader and load your mods.
 
 ## 📖 Documentation
 
-Full docs available at **[GitBook →](https://nitaybl.gitbook.io/luatools-modloader)**
+Full guides, API reference, and examples at **[GitBook →](https://nitaybl.gitbook.io/luatools-modloader)**
 
 ## 🧩 How It Works
 
@@ -70,7 +78,7 @@ luatools doctor                 Diagnose issues
 
 | Mod | Description |
 |-----|-------------|
-| **Credits** | Contributor credits panel with clickable GitHub links |
+| **Credits** | Contributor credits panel with clickable GitHub link |
 | **Cyberpunk Theme** | Neon gradients, animated glow borders, Orbitron font |
 | **Quick Actions** | Copy AppID, Open Folder, SteamDB, PCGamingWiki buttons |
 | **Fix Notifications** | Animated toast alerts with sound feedback |
