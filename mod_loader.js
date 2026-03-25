@@ -171,6 +171,107 @@
         }
     }
 
+    // Check for updates and show a banner if available (user must approve)
+    async function checkForUpdates() {
+        try {
+            var result = await Millennium.callServerMethod('luatools', 'check_modloader_update', {});
+            var data = JSON.parse(result);
+
+            if (!data.updateAvailable) return;
+
+            // Build the update banner
+            var banner = document.createElement('div');
+            banner.id = 'ltmod-update-banner';
+            banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:100000;' +
+                'background:linear-gradient(135deg,#1a1a2e,#16213e);' +
+                'border-bottom:1px solid rgba(0,255,255,0.2);' +
+                'padding:12px 24px;display:flex;align-items:center;justify-content:space-between;' +
+                'font-family:system-ui,-apple-system,sans-serif;font-size:13px;color:#c9d1d9;' +
+                'box-shadow:0 4px 20px rgba(0,0,0,0.4);animation:ltmod-banner-in 0.4s ease;';
+
+            var info = document.createElement('div');
+            info.innerHTML = '🔄 <strong style="color:#00ffff;">Mod Loader Update Available</strong> — ' +
+                '<span style="color:#888;">v' + data.currentVersion + '</span> → ' +
+                '<span style="color:#4ade80;font-weight:600;">v' + data.latestVersion + '</span>';
+
+            var buttons = document.createElement('div');
+            buttons.style.cssText = 'display:flex;gap:8px;';
+
+            var updateBtn = document.createElement('button');
+            updateBtn.textContent = '✅ Update Now';
+            updateBtn.style.cssText = 'background:rgba(74,222,128,0.15);color:#4ade80;border:1px solid rgba(74,222,128,0.3);' +
+                'padding:6px 16px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;transition:all 0.2s;';
+            updateBtn.addEventListener('mouseenter', function() {
+                updateBtn.style.background = 'rgba(74,222,128,0.25)';
+            });
+            updateBtn.addEventListener('mouseleave', function() {
+                updateBtn.style.background = 'rgba(74,222,128,0.15)';
+            });
+            updateBtn.addEventListener('click', async function() {
+                updateBtn.textContent = '⏳ Updating...';
+                updateBtn.disabled = true;
+                try {
+                    var res = await Millennium.callServerMethod('luatools', 'apply_modloader_update', {});
+                    var r = JSON.parse(res);
+                    if (r.success) {
+                        info.innerHTML = '✅ <strong style="color:#4ade80;">Updated to v' + r.version + '!</strong> Restart Steam to apply.';
+                        updateBtn.remove();
+                        dismissBtn.textContent = 'OK';
+                    } else {
+                        updateBtn.textContent = '❌ Failed';
+                        updateBtn.style.borderColor = 'rgba(248,113,113,0.3)';
+                        updateBtn.style.color = '#f87171';
+                        LuaToolsMods.showToast('Update failed: ' + (r.error || 'Unknown error'), 5000);
+                    }
+                } catch(e) {
+                    updateBtn.textContent = '❌ Error';
+                    console.error('[ModLoader] Update error:', e);
+                }
+            });
+
+            var dismissBtn = document.createElement('button');
+            dismissBtn.textContent = '✕ Dismiss';
+            dismissBtn.style.cssText = 'background:rgba(255,255,255,0.05);color:#888;border:1px solid rgba(255,255,255,0.1);' +
+                'padding:6px 16px;border-radius:6px;cursor:pointer;font-size:12px;transition:all 0.2s;';
+            dismissBtn.addEventListener('click', function() {
+                banner.style.animation = 'ltmod-banner-out 0.3s ease forwards';
+                setTimeout(function() { banner.remove(); bannerStyle.remove(); }, 300);
+            });
+
+            buttons.appendChild(updateBtn);
+            buttons.appendChild(dismissBtn);
+            banner.appendChild(info);
+            banner.appendChild(buttons);
+
+            var bannerStyle = document.createElement('style');
+            bannerStyle.textContent = '@keyframes ltmod-banner-in{from{transform:translateY(-100%)}to{transform:translateY(0)}}' +
+                '@keyframes ltmod-banner-out{from{transform:translateY(0);opacity:1}to{transform:translateY(-100%);opacity:0}}';
+            document.head.appendChild(bannerStyle);
+            document.body.appendChild(banner);
+
+            console.log('[ModLoader] Update available: v' + data.currentVersion + ' → v' + data.latestVersion);
+
+            // Also check individual mod updates
+            try {
+                var modResult = await Millennium.callServerMethod('luatools', 'check_mod_updates', {});
+                var modUpdates = JSON.parse(modResult);
+                if (modUpdates.length > 0) {
+                    var names = modUpdates.map(function(m) { return m.modName; }).join(', ');
+                    LuaToolsMods.showToast('📦 Mod updates available: ' + names, 5000);
+                }
+            } catch(e) {}
+
+        } catch (err) {
+            // Backend not available or no internet — fail silently
+            console.log('[ModLoader] Update check skipped:', err.message || err);
+        }
+    }
+
     // Boot the mod loader after a short delay to let core LuaTools initialize
-    setTimeout(loadMods, 500);
+    setTimeout(function() {
+        loadMods().then(function() {
+            // Check for updates 3 seconds after mods finish loading
+            setTimeout(checkForUpdates, 3000);
+        });
+    }, 500);
 })();
