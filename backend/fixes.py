@@ -153,10 +153,31 @@ def check_for_fixes(appid: int) -> str:
             result["onlineFix"]["status"] = 404
 
         logger.log(f"LuaTools: Fix check for {appid} via index: generic={appid in index['generic']}, online={appid in index['online']}")
-
-        # AUTOMATED SYSTEM: Dynamic Scraper (Disabled for stability)
-        # The synchronous scraper on the main thread was causing Steam crashes.
-        # Moving fix checks to a non-blocking model in future updates.
+        
+        # AUTOMATED SYSTEM: Dynamic Cloud Scraper
+        # If not found in index, we hit the Cloud API to see if a fix can be scraped/found
+        if not result["onlineFix"]["available"]:
+            try:
+                CLOUD_API_URL = "https://8000-firebase-nitayv-1774433595291.cluster-iusnsmywp5clov45nv5gsxt5he.cloudworkstations.dev/api/request-fix"
+                logger.log(f"LuaTools: AppID {appid} not in index, requesting cloud scrape...")
+                client = ensure_http_client("LuaTools: CloudScrape")
+                
+                # We use a short timeout (5s) for the check to keep Steam responsive
+                api_resp = client.post(CLOUD_API_URL, json={"appid": appid, "gameName": result.get("gameName", "Unknown")}, timeout=8)
+                
+                if api_resp.status_code == 200:
+                    api_data = api_resp.json()
+                    if api_data.get("success") and api_data.get("downloadUrl"):
+                        result["onlineFix"]["status"] = 200
+                        result["onlineFix"]["available"] = True
+                        result["onlineFix"]["url"] = api_data["downloadUrl"]
+                        logger.log(f"LuaTools: Cloud API found fix for {appid}!")
+                elif api_resp.status_code == 202:
+                    # Some APIs return 202 if scraping is in progress
+                    result["onlineFix"]["status"] = 202
+                    logger.log(f"LuaTools: Cloud API is currently scraping {appid}...")
+            except Exception as e:
+                logger.warn(f"LuaTools: Cloud scrape request failed for {appid}: {e}")
         pass
 
     else:
