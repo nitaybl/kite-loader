@@ -20,7 +20,7 @@ $ErrorActionPreference = "Stop"
 # ============================================
 # CONFIGURATION
 # ============================================
-$LUATOOLS_DIR = "C:\Program Files (x86)\Steam\plugins\luatools"
+$LUATOOLS_DIR = "C:\Program Files (x86)\Steam\plugins\kiteloader"
 $MODS_DIR = Join-Path $LUATOOLS_DIR "mods"
 $CONFIG_FILE = Join-Path $MODS_DIR "mods_config.json"
 $MODLOADER_REPO = "nitaybl/kite"
@@ -421,17 +421,28 @@ function Install-ModLoader {
     
     $source = Get-ChildItem $tempDir -Directory | Select-Object -First 1
     
-    # Copy mod_loader.js to public/
+    # Copy plugin.json to root
+    $jsonSource = Join-Path $source.FullName "plugin.json"
+    if (Test-Path $jsonSource) {
+        Copy-Item $jsonSource $LUATOOLS_DIR -Force
+        Write-Success "Installed plugin.json"
+    }
+
+    # Copy mod_loader.js to .millennium/Dist/index.js for Millennium 2.35.0 compliance
     $jsSource = Join-Path $source.FullName "mod_loader.js"
     if (Test-Path $jsSource) {
-        Copy-Item $jsSource (Join-Path $LUATOOLS_DIR "public\mod_loader.js") -Force
-        Write-Success "Installed mod_loader.js"
+        $distDir = Join-Path $LUATOOLS_DIR ".millennium\Dist"
+        if (!(Test-Path $distDir)) { New-Item -ItemType Directory -Path $distDir -Force | Out-Null }
+        Copy-Item $jsSource (Join-Path $distDir "index.js") -Force
+        Write-Success "Installed mod_loader.js to Millennium Dist"
     }
     
     # Copy mod_loader.py to backend/
     $pySource = Join-Path $source.FullName "mod_loader.py"
     if (Test-Path $pySource) {
-        Copy-Item $pySource (Join-Path $LUATOOLS_DIR "backend\mod_loader.py") -Force
+        $backendDir = Join-Path $LUATOOLS_DIR "backend"
+        if (!(Test-Path $backendDir)) { New-Item -ItemType Directory -Path $backendDir -Force | Out-Null }
+        Copy-Item $pySource (Join-Path $backendDir "mod_loader.py") -Force
         Write-Success "Installed mod_loader.py"
     }
     
