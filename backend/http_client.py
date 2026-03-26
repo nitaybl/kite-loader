@@ -72,6 +72,7 @@ class NativeClient:
         except subprocess.TimeoutExpired as e:
             output = e.stdout.decode('utf-8', errors='ignore') if getattr(e, 'stdout', None) else ""
         except Exception as e:
+            logger.error(f"LuaTools: GET failed for {url}: {e}")
             output = ""
             
         status_code_str = output[-3:] if len(output) >= 3 else "500"
@@ -118,7 +119,7 @@ class NativeClient:
                     if len(parts) == 2:
                         resp_headers[parts[0].strip().lower()] = parts[1].strip()
         except Exception as e:
-            logger.warn(f"LuaTools: Failed to get headers for stream: {e}")
+            logger.error(f"LuaTools: Failed to get headers for stream: {e}")
 
         # Now, prepare the actual streaming command
         stream_cmd = ["curl.exe", "-sL", "--compressed"]
@@ -128,6 +129,51 @@ class NativeClient:
         
         proc = subprocess.Popen(stream_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=0x08000000)
         return MockStreamResponse(proc, resp_headers, status_code)
+
+    def post(self, url, data=None, json=None, headers=None, timeout=None):
+        cmd = ["curl.exe", "-sL", "-X", "POST", "-w", "%{http_code}"]
+        
+        # Merge default headers with passed headers
+        req_headers = DEFAULT_HEADERS.copy()
+        if headers:
+            req_headers.update(headers)
+        
+        # Ensure the project's User-Agent is used if not explicitly overridden
+        if "User-Agent" not in req_headers:
+            req_headers["User-Agent"] = USER_AGENT
+            
+        # Handle POST data
+        if json is not None:
+            import json as json_lib
+            req_headers["Content-Type"] = "application/json"
+            cmd.extend(["-d", json_lib.dumps(json)])
+        elif data is not None:
+            if isinstance(data, dict):
+                import urllib.parse
+                cmd.extend(["-d", urllib.parse.urlencode(data)])
+            else:
+                cmd.extend(["-d", str(data)])
+                
+        for k, v in req_headers.items():
+            cmd.extend(["-H", f"{k}: {v}"])
+        cmd.append(url)
+        
+        try:
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout or self.timeout, creationflags=0x08000000)
+            output = proc.stdout.decode('utf-8', errors='ignore') if proc.stdout else ""
+        except Exception as e:
+            logger.error(f"LuaTools: POST failed for {url}: {e}")
+            output = ""
+
+        status_code_str = output[-3:] if len(output) >= 3 else "500"
+        try:
+            status_code = int(status_code_str)
+            text = output[:-3]
+        except:
+            status_code = 500
+            text = output
+            
+        return MockResponse(text, status_code, {})
 
 _HTTP_CLIENT = None
 
